@@ -15,6 +15,7 @@ import org.whispersystems.libsignal.protocol.CiphertextMessage;
 import org.whispersystems.libsignal.state.SessionState;
 import org.whispersystems.libsignal.util.ByteUtil;
 import org.whispersystems.libsignal.util.Pair;
+import org.whispersystems.libsignal.util.Triplet;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.io.ByteArrayOutputStream;
@@ -37,6 +38,7 @@ public class RatchetingSession {
                      .setTheirOneTimePreKey(Optional.<ECPublicKey>absent());
 
       RatchetingSession.initializeSession(sessionState, aliceParameters.create());
+      //sessionState.setSessionHash(parameters.getTheirRatchetKey().serialize());
     } else {
       BobSignalProtocolParameters.Builder bobParameters = BobSignalProtocolParameters.newBuilder();
 
@@ -77,11 +79,18 @@ public class RatchetingSession {
       }
 
       DerivedKeys             derivedKeys  = calculateDerivedKeys(secrets.toByteArray());
-      Pair<RootKey, ChainKey> sendingChain = derivedKeys.getRootKey().createChain(parameters.getTheirRatchetKey(), sendingRatchetKey);
+      Triplet<RootKey, ChainKey, AuthKey> sendingChain = derivedKeys.getRootKey().createChain(parameters.getTheirRatchetKey(), sendingRatchetKey);
 
       sessionState.addReceiverChain(parameters.getTheirRatchetKey(), derivedKeys.getChainKey());
       sessionState.setSenderChain(sendingRatchetKey, sendingChain.second());
       sessionState.setRootKey(sendingChain.first());
+
+      sessionState.initializeSessionHashPrevious(parameters.getTheirIdentityKey().serialize(),
+                                                  parameters.getTheirSignedPreKey().serialize(),
+                                                  parameters.getOurIdentityKey().getPublicKey().serialize());
+
+      sessionState.initializeSessionHashCurrent(sendingRatchetKey.getPublicKey().serialize());
+
     } catch (IOException e) {
       throw new AssertionError(e);
     }
@@ -116,6 +125,11 @@ public class RatchetingSession {
 
       sessionState.setSenderChain(parameters.getOurRatchetKey(), derivedKeys.getChainKey());
       sessionState.setRootKey(derivedKeys.getRootKey());
+
+      sessionState.initializeSessionHashPrevious(parameters.getOurIdentityKey().getPublicKey().serialize(),
+                                                  parameters.getOurSignedPreKey().getPublicKey().serialize(),
+                                                  parameters.getTheirIdentityKey().getPublicKey().serialize());
+
     } catch (IOException e) {
       throw new AssertionError(e);
     }

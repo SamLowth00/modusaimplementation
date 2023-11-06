@@ -15,12 +15,12 @@ import org.whispersystems.libsignal.util.ByteUtil;
 import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.libsignal.util.Triplet;
 
-public class RootKey {
+public class AuthKey {
 
   private final HKDF   kdf;
   private final byte[] key;
 
-  public RootKey(HKDF kdf, byte[] key) {
+  public AuthKey(HKDF kdf, byte[] key) {
     this.kdf = kdf;
     this.key = key;
   }

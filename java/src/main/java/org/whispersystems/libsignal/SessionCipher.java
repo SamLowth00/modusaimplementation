@@ -14,6 +14,7 @@ import org.whispersystems.libsignal.protocol.SignalMessage;
 import org.whispersystems.libsignal.ratchet.ChainKey;
 import org.whispersystems.libsignal.ratchet.MessageKeys;
 import org.whispersystems.libsignal.ratchet.RootKey;
+import org.whispersystems.libsignal.ratchet.AuthKey;
 import org.whispersystems.libsignal.state.SignalProtocolStore;
 import org.whispersystems.libsignal.state.IdentityKeyStore;
 import org.whispersystems.libsignal.state.PreKeyStore;
@@ -23,6 +24,7 @@ import org.whispersystems.libsignal.state.SessionStore;
 import org.whispersystems.libsignal.state.SignedPreKeyStore;
 import org.whispersystems.libsignal.util.ByteUtil;
 import org.whispersystems.libsignal.util.Pair;
+import org.whispersystems.libsignal.util.Triplet;
 import org.whispersystems.libsignal.util.guava.Optional;
 
 import java.security.InvalidAlgorithmParameterException;
@@ -316,6 +318,10 @@ public class SessionCipher {
 
     byte[] plaintext = getPlaintext(messageKeys, ciphertextMessage.getBody());
 
+    //if (counter == 0){
+      //sessionState.setSessionHash(theirEphemeral.serialize());
+    //}
+
     sessionState.clearUnacknowledgedPreKeyMessage();
 
     return plaintext;
@@ -348,14 +354,22 @@ public class SessionCipher {
       } else {
         RootKey                 rootKey         = sessionState.getRootKey();
         ECKeyPair               ourEphemeral    = sessionState.getSenderRatchetKeyPair();
-        Pair<RootKey, ChainKey> receiverChain   = rootKey.createChain(theirEphemeral, ourEphemeral);
+        Triplet<RootKey, ChainKey, AuthKey> receiverChain   = rootKey.createChain(theirEphemeral, ourEphemeral);
         ECKeyPair               ourNewEphemeral = Curve.generateKeyPair();
-        Pair<RootKey, ChainKey> senderChain     = receiverChain.first().createChain(theirEphemeral, ourNewEphemeral);
+        Triplet<RootKey, ChainKey, AuthKey> senderChain     = receiverChain.first().createChain(theirEphemeral, ourNewEphemeral);
 
         sessionState.setRootKey(senderChain.first());
         sessionState.addReceiverChain(theirEphemeral, receiverChain.second());
         sessionState.setPreviousCounter(Math.max(sessionState.getSenderChainKey().getIndex()-1, 0));
         sessionState.setSenderChain(ourNewEphemeral, senderChain.second());
+
+        sessionState.updateSessionHashPrevious(theirEphemeral.serialize());
+        sessionState.updateSessionHashCurrent(ourNewEphemeral.getPublicKey().serialize());
+        //int            counter           = ciphertextMessage.getCounter();
+
+        //if (sessionState.getSenderChainKey().getIndex() == 0){
+          //sessionState.setSessionHash(ourNewEphemeral.getPublicKey().serialize());
+        //}
 
         return receiverChain.second();
       }

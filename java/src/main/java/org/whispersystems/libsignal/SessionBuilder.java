@@ -144,6 +144,11 @@ public class SessionBuilder {
     sessionRecord.getSessionState().setRemoteRegistrationId(message.getRegistrationId());
     sessionRecord.getSessionState().setAliceBaseKey(message.getBaseKey().serialize());
 
+    //sessionRecord.getSessionState().initializeSessionHash(message.getIdentityKey().getPublicKey().serialize(),
+                                                          //ourSignedPreKey.getPublicKey().serialize());
+
+    //sessionRecord.getSessionState().initializeSessionHash(parameters.getOurIdentityKey().getPublicKey().serialize(),
+                                                          //parameters.getOurSignedPreKey().getPublicKey().serialize());
     if (message.getPreKeyId().isPresent()) {
       return message.getPreKeyId();
     } else {
@@ -197,7 +202,7 @@ public class SessionBuilder {
                 .setTheirOneTimePreKey(theirOneTimePreKey);
 
       if (!sessionRecord.isFresh()) sessionRecord.archiveCurrentState();
-
+      //byte[] seshHash = sessionRecord.getSessionState().initializeSessionHash(parameters);
       RatchetingSession.initializeSession(sessionRecord.getSessionState(), parameters.create());
 
       sessionRecord.getSessionState().setUnacknowledgedPreKeyMessage(theirOneTimePreKeyId, preKey.getSignedPreKeyId(), ourBaseKey.getPublicKey());
@@ -207,6 +212,11 @@ public class SessionBuilder {
 
       identityKeyStore.saveIdentity(remoteAddress, preKey.getIdentityKey());
       sessionStore.storeSession(remoteAddress, sessionRecord);
+
+      //possibly add theirOneTimePreKey.serialize()
+      //sessionRecord.getSessionState().initializeSessionHash(preKey.getIdentityKey().getPublicKey().serialize(),
+                                                            //preKey.getSignedPreKey().serialize(),
+                                                            //preKey.getSignedPreKeySignature());
     }
   }
 

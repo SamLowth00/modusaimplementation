@@ -9,15 +9,20 @@ import org.whispersystems.libsignal.util.ByteUtil;
 
 public class DerivedRootSecrets {
 
-  public static final int SIZE = 64;
+  public static final int SIZE = 96;
 
   private final byte[] rootKey;
   private final byte[] chainKey;
+  private final byte[] authKey;
 
   public DerivedRootSecrets(byte[] okm) {
-    byte[][] keys = ByteUtil.split(okm, 32, 32);
+    byte[][] keys = ByteUtil.split(okm, 32, 64);
     this.rootKey  = keys[0];
-    this.chainKey = keys[1];
+    byte[][] keys2 = ByteUtil.split(keys[1],32, 32);
+    this.chainKey = keys2[0];
+    this.authKey = keys2[1];
+    //this.authKey = keys[2];
+    //System.out.println("TEST >>>"+keys);
   }
 
   public byte[] getRootKey() {
@@ -26,6 +31,9 @@ public class DerivedRootSecrets {
 
   public byte[] getChainKey() {
     return chainKey;
+  }
+  public byte[] getAuthKey() {
+    return authKey;
   }
 
 }

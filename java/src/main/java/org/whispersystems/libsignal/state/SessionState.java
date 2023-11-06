@@ -21,15 +21,20 @@ import org.whispersystems.libsignal.logging.Log;
 import org.whispersystems.libsignal.ratchet.ChainKey;
 import org.whispersystems.libsignal.ratchet.MessageKeys;
 import org.whispersystems.libsignal.ratchet.RootKey;
+import org.whispersystems.libsignal.ratchet.AuthKey;
 import org.whispersystems.libsignal.state.StorageProtos.SessionStructure.Chain;
 import org.whispersystems.libsignal.state.StorageProtos.SessionStructure.PendingKeyExchange;
 import org.whispersystems.libsignal.state.StorageProtos.SessionStructure.PendingPreKey;
 import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.libsignal.util.guava.Optional;
+import org.whispersystems.libsignal.util.ByteUtil;
 
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -39,9 +44,8 @@ import static org.whispersystems.libsignal.state.StorageProtos.SessionStructure;
 public class SessionState {
 
   private static final int MAX_MESSAGE_KEYS = 2000;
-
   private SessionStructure sessionStructure;
-
+  private  byte[]     sessionHash;
   public SessionState() {
     this.sessionStructure = SessionStructure.newBuilder().build();
   }
@@ -123,6 +127,103 @@ public class SessionState {
                                                  .setPreviousCounter(previousCounter)
                                                  .build();
   }
+  //public AuthKey getAuthKey() {
+    //return new AuthKey(HKDF.createFor(getSessionVersion()),
+                        //this.sessionStructure.getRootKey().toByteArray());
+  //}
+  public AuthKey getAuthKey() {
+    return new AuthKey(HKDF.createFor(getSessionVersion()),
+                       this.sessionStructure.getAuthenticationKey().toByteArray());
+  }
+
+  public void setAuthKey(AuthKey authKey) {
+    this.sessionStructure = this.sessionStructure.toBuilder()
+                                                 .setAuthenticationKey(ByteString.copyFrom(authKey.getKeyBytes()))
+                                                 .build();
+  }
+
+  public void initializeSessionHashPrevious(byte[] identityKey, byte[] signedPreKey,byte[] otherIdentityKey){
+    try{
+      MessageDigest digest    = MessageDigest.getInstance("SHA-512");
+      //define sessionhash at start of this class? how to define?
+      //byte[]        sessionHash = ByteUtil.combine(ByteUtil.shortToByteArray(FINGERPRINT_VERSION),                                           //publicKey, stableIdentifier);
+      //byte[] sessionHashUpdate = digest.digest(pkb);
+      //this.sessionHash = sessionHashUpdate;
+      byte[] initialPKB = ByteUtil.combine(identityKey, signedPreKey);
+      digest.update(initialPKB);
+      byte[] sessionHashUpdate = digest.digest(otherIdentityKey);
+      this.sessionStructure = this.sessionStructure.toBuilder()
+                                                   .setSessionHashPrevious(ByteString.copyFrom(sessionHashUpdate))
+                                                   .build();
+    } catch(NoSuchAlgorithmException e){
+      throw new AssertionError(e);
+    }
+  }
+  public void initializeSessionHashCurrent(byte[] ratchetKey){
+    try{
+      MessageDigest digest    = MessageDigest.getInstance("SHA-512");
+      byte[] sessionHashPrevious =  this.sessionStructure.getSessionHashPrevious().toByteArray();
+
+      digest.update(sessionHashPrevious);
+      byte[] sessionHashCurrent = digest.digest(ratchetKey);
+      this.sessionStructure = this.sessionStructure.toBuilder()
+                                                  .setSessionHashCurrent(ByteString.copyFrom(sessionHashCurrent))
+                                                  .build();
+      } catch(NoSuchAlgorithmException e){
+        throw new AssertionError(e);
+      }
+  }
+
+  public void updateSessionHashPrevious(byte[] ratchetKey){
+    try{
+      MessageDigest digest = MessageDigest.getInstance("SHA-512");
+      //change to sessionhash current
+      //byte[] sessionHashPrevious =  this.sessionStructure.getSessionHashPrevious().toByteArray();
+      byte[] sessionHashPrevious =  this.sessionStructure.getSessionHashCurrent().toByteArray();
+      digest.update(sessionHashPrevious);
+      byte[] newSessionHashPrevious = digest.digest(ratchetKey);
+      this.sessionStructure = this.sessionStructure.toBuilder()
+                                                  .setSessionHashPrevious(ByteString.copyFrom(newSessionHashPrevious))
+                                                  .build();
+    } catch(NoSuchAlgorithmException e){
+      throw new AssertionError(e);
+    }
+  }
+
+  public void updateSessionHashCurrent(byte[] ratchetKey){
+    try{
+      MessageDigest digest = MessageDigest.getInstance("SHA-512");
+      byte[] sessionHashPrevious =  this.sessionStructure.getSessionHashPrevious().toByteArray();
+      digest.update(sessionHashPrevious);
+      byte[] newSessionHashCurrent = digest.digest(ratchetKey);
+      this.sessionStructure = this.sessionStructure.toBuilder()
+                                                  .setSessionHashCurrent(ByteString.copyFrom(newSessionHashCurrent))
+                                                  .build();
+    } catch(NoSuchAlgorithmException e){
+      throw new AssertionError(e);
+    }
+  }
+
+  //public void setSessionHash(byte[] publicKey){
+    //try{
+      //MessageDigest digest    = MessageDigest.getInstance("SHA-512");
+    //define sessionhash at start of this class? how to define?
+    //byte[]        sessionHash = ByteUtil.combine(ByteUtil.shortToByteArray(FINGERPRINT_VERSION),
+                                               //publicKey, stableIdentifier);
+      //sessionHash = this.sessionStructure.getSessionHash().toByteArray();
+      //digest.update(sessionHash);
+      //byte[] sessionHashUpdate = digest.digest(publicKey);
+      //this.sessionStructure = this.sessionStructure.toBuilder()
+                                                   //.setRootKey(ByteString.copyFrom(sessionHashUpdate))
+                                                   //.build();
+    //} catch (NoSuchAlgorithmException e) {
+      //throw new AssertionError(e);
+    //}
+  //}
+
+  //public byte[] getSessionHash(){
+    //return (this.sessionHash);
+  //}
 
   public RootKey getRootKey() {
     return new RootKey(HKDF.createFor(getSessionVersion()),

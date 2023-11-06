@@ -5,6 +5,11 @@
  */
 package org.whispersystems.libsignal.fingerprint;
 
+import org.whispersystems.libsignal.ratchet.RatchetingSession;
+
+import org.whispersystems.libsignal.state.SessionState;
+import org.whispersystems.libsignal.ratchet.AuthKey;
+
 import org.whispersystems.libsignal.IdentityKey;
 import org.whispersystems.libsignal.util.ByteUtil;
 import org.whispersystems.libsignal.util.IdentityKeyComparator;
@@ -12,16 +17,20 @@ import org.whispersystems.libsignal.util.IdentityKeyComparator;
 import java.io.ByteArrayOutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 public class NumericFingerprintGenerator implements FingerprintGenerator {
 
   private static final int FINGERPRINT_VERSION = 0;
-
   private final int iterations;
+  //private final SessionState sessionState;
 
   /**
    * Construct a fingerprint generator for 60 digit numerics.
@@ -55,7 +64,7 @@ public class NumericFingerprintGenerator implements FingerprintGenerator {
                                byte[] localStableIdentifier,
                                final IdentityKey localIdentityKey,
                                byte[] remoteStableIdentifier,
-                               final IdentityKey remoteIdentityKey)
+                               final IdentityKey remoteIdentityKey, final AuthKey authenticationKey, final byte[] sessionHash)
   {
     return createFor(version,
                      localStableIdentifier,
@@ -65,7 +74,7 @@ public class NumericFingerprintGenerator implements FingerprintGenerator {
                      remoteStableIdentifier,
                      new LinkedList<IdentityKey>() {{
                        add(remoteIdentityKey);
-                     }});
+                     }}, authenticationKey, sessionHash);
   }
 
   /**
@@ -86,10 +95,12 @@ public class NumericFingerprintGenerator implements FingerprintGenerator {
                                byte[] localStableIdentifier,
                                List<IdentityKey> localIdentityKeys,
                                byte[] remoteStableIdentifier,
-                               List<IdentityKey> remoteIdentityKeys)
+                               List<IdentityKey> remoteIdentityKeys, AuthKey authenticationKey, byte[] sessionHash)
   {
-    byte[] localFingerprint  = getFingerprint(iterations, localStableIdentifier, localIdentityKeys);
-    byte[] remoteFingerprint = getFingerprint(iterations, remoteStableIdentifier, remoteIdentityKeys);
+    //byte[] authKey = sessionState.getAuthKey().getKeyBytes();
+    byte[] authKey = authenticationKey.getKeyBytes();
+    byte[] localFingerprint  = getFingerprint(iterations, localStableIdentifier, localIdentityKeys, authKey, sessionHash);
+    byte[] remoteFingerprint = getFingerprint(iterations, remoteStableIdentifier, remoteIdentityKeys, authKey, sessionHash);
 
     DisplayableFingerprint displayableFingerprint = new DisplayableFingerprint(localFingerprint,
                                                                                remoteFingerprint);
@@ -100,21 +111,34 @@ public class NumericFingerprintGenerator implements FingerprintGenerator {
 
     return new Fingerprint(displayableFingerprint, scannableFingerprint);
   }
-
-  private byte[] getFingerprint(int iterations, byte[] stableIdentifier, List<IdentityKey> unsortedIdentityKeys) {
+//1. edit signiture of getFingerprint to add authkey + chain hash
+  private byte[] getFingerprint(int iterations, byte[] stableIdentifier, List<IdentityKey> unsortedIdentityKeys, byte[] authKey, byte[] sessionHash) {
     try {
+      //byte[] sessionHash =  SessionState.getSessionHash();
+
+      //byte [] thisAuthKey = authKey.getKeyBytes();
       MessageDigest digest    = MessageDigest.getInstance("SHA-512");
       byte[]        publicKey = getLogicalKeyBytes(unsortedIdentityKeys);
       byte[]        hash      = ByteUtil.combine(ByteUtil.shortToByteArray(FINGERPRINT_VERSION),
                                                  publicKey, stableIdentifier);
+      //try do this in session state or somewhere else
+      //byte[]        sessionHash = ByteUtil.combine(ByteUtil.shortToByteArray(FINGERPRINT_VERSION),
+                                                 //publicKey, stableIdentifier);
+      //digest.update(sessionHash);
+      //sessionHash = digest.digest(publicKey);
 
-      for (int i=0;i<iterations;i++) {
-        digest.update(hash);
-        hash = digest.digest(publicKey);
-      }
-
-      return hash;
-    } catch (NoSuchAlgorithmException e) {
+      //for (int i=0;i<iterations;i++) {
+        //digest.update(hash);
+        //hash = digest.digest(publicKey);
+      //}
+      Mac mac = Mac.getInstance("HmacSHA256");
+      //insert authkey from session state
+      mac.init(new SecretKeySpec(authKey, "HmacSHA256"));
+      //insert value of chain hash from session state
+      return (mac.doFinal(sessionHash));
+      //return hash;
+    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+    //} catch (NoSuchAlgorithmException e) {
       throw new AssertionError(e);
     }
   }
